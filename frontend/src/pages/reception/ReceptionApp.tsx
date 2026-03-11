@@ -16,6 +16,8 @@ const INITIAL_FORM_DATA: EntryFormData = {
   purpose_detail: '',
 }
 
+const ZOOM_FACTOR = 1.2 // デジタルズーム倍率
+
 export default function ReceptionApp() {
   const [formData, setFormData] = useState<EntryFormData>(INITIAL_FORM_DATA)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
@@ -95,13 +97,30 @@ export default function ReceptionApp() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current
       const canvas = canvasRef.current
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      canvas.getContext('2d')?.drawImage(video, 0, 0)
       
-      const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8)
-      setPhotoPreview(photoDataUrl)
-      stopCamera()
+      // ビデオの実際の解像度
+      const vWidth = video.videoWidth
+      const vHeight = video.videoHeight
+
+      // クロップ範囲の計算 (中央を抜き出す)
+      const sWidth = vWidth / ZOOM_FACTOR
+      const sHeight = vHeight / ZOOM_FACTOR
+      const sx = (vWidth - sWidth) / 2
+      const sy = (vHeight - sHeight) / 2
+
+      // キャンバスサイズはクロップ後のサイズ（または標準サイズ）に設定
+      canvas.width = sWidth
+      canvas.height = sHeight
+      
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        // 中央部分を切り抜いて描画
+        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight)
+        
+        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8)
+        setPhotoPreview(photoDataUrl)
+        stopCamera()
+      }
     }
   }
 
@@ -224,12 +243,13 @@ export default function ReceptionApp() {
 
               {/* Camera Live View (モバイルのみ) */}
               {isCapturing && !photoPreview && (
-                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black flex flex-col">
+                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black flex flex-col aspect-video">
                   <video 
                     ref={videoRef} 
                     autoPlay 
                     playsInline 
-                    className="w-full h-auto transform scale-x-[-1]" 
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                    style={{ transform: `scaleX(-1) scale(${ZOOM_FACTOR})` }}
                   />
                   <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
                     <button
