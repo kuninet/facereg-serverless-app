@@ -30,6 +30,9 @@ export default function ReceptionApp() {
   // デバイス判定 (簡易)
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   const [deviceChecked, setDeviceChecked] = useState(false)
+  
+  // マウント後にストリームを保持するRef
+  const streamRef = useRef<MediaStream | null>(null)
 
   // カメラ起動
   const startCamera = useCallback(async () => {
@@ -37,16 +40,20 @@ export default function ReceptionApp() {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'user' } 
       })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setIsCapturing(true)
-      }
+      streamRef.current = stream
+      setIsCapturing(true) // ここでtrueにすることで次のレンダリングで <video> がマウントされる
     } catch (err) {
       console.error('Camera access denied:', err)
-      // エラー時は自動的に capture mode を false にし、ファイルアップロードUIを出せるようにする
       setIsCapturing(false)
     }
   }, [])
+
+  // <video> 要素がマウントされたら srcObject にストリームを割り当てる
+  useEffect(() => {
+    if (isCapturing && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+    }
+  }, [isCapturing])
 
   // 初期ロード時のモバイル判定と自動カメラ起動
   useEffect(() => {
@@ -62,9 +69,11 @@ export default function ReceptionApp() {
 
   // カメラ停止
   const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach(track => track.stop())
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
       videoRef.current.srcObject = null
     }
     setIsCapturing(false)
