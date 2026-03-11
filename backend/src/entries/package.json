@@ -1,0 +1,13 @@
+{
+  "name": "facereg-entries-api",
+  "version": "1.0.0",
+  "description": "Face Registration Entries API handling initialize and register",
+  "main": "app.js",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.500.0",
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/lib-dynamodb": "^3.500.0",
+    "@aws-sdk/s3-request-presigner": "^3.500.0"
+  }
+}

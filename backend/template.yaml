@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  facereg-serverless-app
+  Backend infrastructure for Face Registration App.
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 256
+    Tracing: Active
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref EntriesTable
+        PHOTO_BUCKET_NAME: !Ref PhotosBucket
+  Api:
+    TracingEnabled: true
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS,DELETE,PUT'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'" # 本番環境ではフロントエンドのドメインに制限することを推奨
+
+Resources:
+  # -------------------------------------------------------------------
+  # 1. DynamoDB Table (受付データ保管用)
+  # -------------------------------------------------------------------
+  EntriesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: facereg-entries-table
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+
+  # -------------------------------------------------------------------
+  # 2. S3 Bucket (顔写真保管用)
+  # -------------------------------------------------------------------
+  PhotosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "facereg-photos-${AWS::AccountId}-${AWS::Region}"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - PUT
+              - GET
+              - OPTIONS
+            AllowedOrigins:
+              - "*" # 本番ではフロントエンドドメインに制限
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3000
+      LifecycleConfiguration:
+        Rules:
+          - Id: AutoDeletePhotosAfter7Days
+            Status: Enabled
+            ExpirationInDays: 7 # アップロードから7日後に自動削除
+
+  # -------------------------------------------------------------------
+  # 3. HTTP API (API Gateway)
+  # -------------------------------------------------------------------
+  FaceregApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: v1
+
+  # -------------------------------------------------------------------
+  # 4. Lambda Functions (APIの裏側)
+  # -------------------------------------------------------------------
+  InitializeUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/entries/
+      Handler: app.initializeUpload
+      Runtime: nodejs20.x
+      Architectures:
+        - arm64
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref PhotosBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObjectAcl
+              Resource: !Sub "arn:aws:s3:::${PhotosBucket}/*"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /entries/initialize
+            Method: post
+            RestApiId: !Ref FaceregApi
+
+  RegisterEntryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/entries/
+      Handler: app.registerEntry
+      Runtime: nodejs20.x
+      Architectures:
+        - arm64
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EntriesTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /entries
+            Method: post
+            RestApiId: !Ref FaceregApi
+
+  ListEntriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/admin/
+      Handler: app.listEntries
+      Runtime: nodejs20.x
+      Architectures:
+        - arm64
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EntriesTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /admin/entries
+            Method: get
+            RestApiId: !Ref FaceregApi
+
+  BulkDeleteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/admin/
+      Handler: app.bulkDelete
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EntriesTable
+        - S3CrudPolicy:
+            BucketName: !Ref PhotosBucket
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /admin/entries/bulk-delete
+            Method: post
+            RestApiId: !Ref FaceregApi
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${FaceregApi}.execute-api.${AWS::Region}.amazonaws.com/v1"
+  PhotosBucketName:
+    Description: "S3 Bucket for Photos"
+    Value: !Ref PhotosBucket
+  EntriesTableName:
+    Description: "DynamoDB Table for Entries"
+    Value: !Ref EntriesTable
