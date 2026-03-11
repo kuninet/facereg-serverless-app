@@ -1,0 +1,5 @@
+Issue #1 のレビュー結果を設計書に反映しました。
+- UI設計: 情報漏洩防止のため autocomplete=off を追記
+- DB設計: DynamoDB TTLのラグについて、API側でのフィルター制約を追記
+- API設計: 署名付きURLへのファイルサイズ・拡張子制限を追記
+- Rules: 今後のワークフロー（Issue -> Branch -> PR -> Human Merge）を絶対ルールとして追加

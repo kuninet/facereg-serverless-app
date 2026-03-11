@@ -89,6 +89,9 @@ paths:
       description: >
         S3に画像を直接アップロードするための「署名付きURL(Presigned URL)」を発行します。
         このAPIを叩いた時点ではまだDBに保存されません。
+        【セキュリティ要件】 巨大ファイルのアップロードや想定外のファイル形式を防ぐため、
+        S3の POST Policy 機能等を利用し、指定した content_type (image/jpeg, image/png等) および
+        ファイルサイズ上限 (例: 10MB) を強制したアップロードURLを発行すること。
       requestBody:
         required: true
         content:
