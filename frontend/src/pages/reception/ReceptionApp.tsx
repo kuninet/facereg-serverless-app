@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Camera, Upload, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { apiClient } from '../../api/apiClient'
 
@@ -16,6 +16,8 @@ const INITIAL_FORM_DATA: EntryFormData = {
   purpose_detail: '',
 }
 
+const ZOOM_FACTOR = 1.2 // デジタルズーム倍率
+
 export default function ReceptionApp() {
   const [formData, setFormData] = useState<EntryFormData>(INITIAL_FORM_DATA)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
@@ -27,44 +29,98 @@ export default function ReceptionApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // デバイス判定 (簡易)
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  const [deviceChecked, setDeviceChecked] = useState(false)
+  
+  // マウント後にストリームを保持するRef
+  const streamRef = useRef<MediaStream | null>(null)
+
   // カメラ起動
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user' } 
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
       })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setIsCapturing(true)
-      }
+      streamRef.current = stream
+      setIsCapturing(true) // ここでtrueにすることで次のレンダリングで <video> がマウントされる
     } catch (err) {
       console.error('Camera access denied:', err)
-      alert('カメラのアクセスが拒否されました。設定を確認するか、ファイルアップロードをご利用ください。')
+      setIsCapturing(false)
     }
-  }
+  }, [])
+
+  // <video> 要素がマウントされたら srcObject にストリームを割り当てる
+  useEffect(() => {
+    if (isCapturing && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+    }
+  }, [isCapturing])
+
+  // 初期ロード時のモバイル判定と自動カメラ起動
+  useEffect(() => {
+    if (!deviceChecked) {
+      if (isMobile) {
+        startCamera().catch(err => {
+          console.warn('Auto start camera failed:', err)
+        })
+      }
+      setDeviceChecked(true)
+    }
+  }, [isMobile, startCamera, deviceChecked])
 
   // カメラ停止
   const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach(track => track.stop())
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
       videoRef.current.srcObject = null
     }
     setIsCapturing(false)
   }, [])
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      stopCamera()
+    }
+  }, [stopCamera])
 
   // 写真撮影
   const takePhoto = () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current
       const canvas = canvasRef.current
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      canvas.getContext('2d')?.drawImage(video, 0, 0)
       
-      const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8)
-      setPhotoPreview(photoDataUrl)
-      stopCamera()
+      // ビデオの実際の解像度
+      const vWidth = video.videoWidth
+      const vHeight = video.videoHeight
+
+      // クロップ範囲の計算 (中央を抜き出す)
+      const sWidth = vWidth / ZOOM_FACTOR
+      const sHeight = vHeight / ZOOM_FACTOR
+      const sx = (vWidth - sWidth) / 2
+      const sy = (vHeight - sHeight) / 2
+
+      // キャンバスサイズはクロップ後のサイズ（または標準サイズ）に設定
+      canvas.width = sWidth
+      canvas.height = sHeight
+      
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        // 中央部分を切り抜いて描画
+        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight)
+        
+        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8)
+        setPhotoPreview(photoDataUrl)
+        stopCamera()
+      }
     }
   }
 
@@ -161,16 +217,13 @@ export default function ReceptionApp() {
             <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-6 bg-gray-50 min-h-[320px]">
               
               {!photoPreview && !isCapturing && (
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <button
-                    type="button"
-                    onClick={startCamera}
-                    className="flex items-center gap-2 px-6 py-3 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors shadow-sm"
-                  >
-                    <Camera className="w-5 h-5" />
-                    カメラを起動する
-                  </button>
-                  <label className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm cursor-pointer">
+                <div className="flex flex-col items-center gap-4 text-center">
+                  {isMobile && (
+                    <div className="text-gray-500 mb-2 text-sm">
+                      カメラへのアクセスが許可されていないか、利用できません。
+                    </div>
+                  )}
+                  <label className="flex items-center gap-2 px-8 py-4 bg-[var(--primary)] text-white font-bold rounded-lg hover:bg-[var(--primary-hover)] transition-colors shadow-sm cursor-pointer">
                     <Upload className="w-5 h-5" />
                     ファイルを選択
                     <input 
@@ -179,34 +232,33 @@ export default function ReceptionApp() {
                       className="hidden" 
                       ref={fileInputRef}
                       onChange={handleFileUpload}
+                      onClick={(e) => {
+                        // 同じファイルを選び直せるようにリセット
+                        (e.target as HTMLInputElement).value = ''
+                      }}
                     />
                   </label>
                 </div>
               )}
 
-              {/* Camera Live View */}
+              {/* Camera Live View (モバイルのみ) */}
               {isCapturing && !photoPreview && (
-                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black">
+                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black flex flex-col aspect-video">
                   <video 
                     ref={videoRef} 
                     autoPlay 
                     playsInline 
-                    className="w-full h-auto transform scale-x-[-1]" 
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                    style={{ transform: `scaleX(-1) scale(${ZOOM_FACTOR})` }}
                   />
                   <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
                     <button
                       type="button"
                       onClick={takePhoto}
-                      className="bg-white text-gray-900 rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:bg-gray-100 transition-transform hover:scale-105"
+                      className="flex items-center gap-2 bg-white text-gray-900 px-6 py-3 rounded-full font-bold shadow-lg hover:bg-gray-100 transition-transform active:scale-95"
                     >
-                      <Camera className="w-6 h-6" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={stopCamera}
-                      className="bg-gray-800/70 text-white px-4 py-2 rounded-full text-sm hover:bg-gray-700/70 backdrop-blur-sm"
-                    >
-                      キャンセル
+                      <Camera className="w-5 h-5" />
+                      撮影
                     </button>
                   </div>
                 </div>
@@ -218,10 +270,17 @@ export default function ReceptionApp() {
                   <img src={photoPreview} alt="Preview" className="w-full h-auto" />
                   <button
                     type="button"
-                    onClick={() => setPhotoPreview(null)}
-                    className="absolute top-2 right-2 bg-gray-900/70 text-white p-2 rounded-full hover:bg-gray-800/70 backdrop-blur-sm transition-colors"
+                    onClick={() => {
+                      setPhotoPreview(null)
+                      // モバイルなら再撮影できるようカメラを再起動する
+                      if (isMobile) {
+                        startCamera().catch(err => console.warn(err))
+                      }
+                    }}
+                    className="absolute top-2 right-2 bg-gray-900/70 text-white p-2 text-sm flex items-center gap-1 rounded hover:bg-gray-800/70 backdrop-blur-sm transition-colors"
                   >
-                    <RefreshCw className="w-5 h-5" />
+                    <RefreshCw className="w-4 h-4" />
+                    撮り直す
                   </button>
                 </div>
               )}
