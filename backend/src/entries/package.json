@@ -9,5 +9,12 @@
     "@aws-sdk/client-s3": "^3.500.0",
     "@aws-sdk/lib-dynamodb": "^3.500.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0"
+  },
+  "devDependencies": {
+    "aws-sdk-client-mock": "^4.1.0",
+    "vitest": "^4.0.18"
+  },
+  "scripts": {
+    "test": "vitest run"
   }
 }
