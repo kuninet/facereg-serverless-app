@@ -1,15 +1,19 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
-  --primary: #4F46E5;
-  --primary-hover: #4338CA;
-  --bg-color: #F9FAFB;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --bg-color: #f9fafb;
   --text-main: #111827;
-  --text-muted: #6B7280;
+  --text-muted: #6b7280;
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    sans-serif;
   background-color: var(--bg-color);
   color: var(--text-main);
   margin: 0;
