@@ -38,7 +38,11 @@ export default function ReceptionApp() {
   const startCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user' } 
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        } 
       })
       streamRef.current = stream
       setIsCapturing(true) // ここでtrueにすることで次のレンダリングで <video> がマウントされる
@@ -195,9 +199,11 @@ export default function ReceptionApp() {
               
               {!photoPreview && !isCapturing && (
                 <div className="flex flex-col items-center gap-4 text-center">
-                  <div className="text-gray-500 mb-2">
-                    {isMobile ? 'カメラへのアクセスができませんでした。' : 'PCからのアクセスです。'}
-                  </div>
+                  {isMobile && (
+                    <div className="text-gray-500 mb-2 text-sm">
+                      カメラへのアクセスが許可されていないか、利用できません。
+                    </div>
+                  )}
                   <label className="flex items-center gap-2 px-8 py-4 bg-[var(--primary)] text-white font-bold rounded-lg hover:bg-[var(--primary-hover)] transition-colors shadow-sm cursor-pointer">
                     <Upload className="w-5 h-5" />
                     ファイルを選択
