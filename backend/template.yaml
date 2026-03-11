@@ -87,7 +87,7 @@ Resources:
       Handler: app.initializeUpload
       Runtime: nodejs20.x
       Architectures:
-        - x86_64
+        - arm64
       Policies:
         - S3WritePolicy:
             BucketName: !Ref PhotosBucket
@@ -111,7 +111,7 @@ Resources:
       Handler: app.registerEntry
       Runtime: nodejs20.x
       Architectures:
-        - x86_64
+        - arm64
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntriesTable
@@ -130,7 +130,7 @@ Resources:
       Handler: app.listEntries
       Runtime: nodejs20.x
       Architectures:
-        - x86_64
+        - arm64
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref EntriesTable
