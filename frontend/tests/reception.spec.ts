@@ -5,10 +5,10 @@ test.describe('受付画面 (キオスク用)', () => {
     await page.goto('/');
   });
 
-  test('初期表示でカメラ起動またはファイル選択のUIが表示されること', async ({ page }) => {
+  test('初期表示でファイル選択のUIが表示されること', async ({ page }) => {
     await expect(page.getByRole('heading', { name: '顔写真 受付システム' })).toBeVisible();
-    await expect(page.getByText('カメラを起動する')).toBeVisible();
     await expect(page.getByText('ファイルを選択')).toBeVisible();
+    await expect(page.getByText('カメラを起動する')).not.toBeVisible();
   });
 
   test('必須項目を入力せずに登録ボタンを押せないこと', async ({ page }) => {
