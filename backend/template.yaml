@@ -55,6 +55,7 @@ Resources:
             AllowedMethods:
               - PUT
               - GET
+              - POST
             AllowedOrigins:
               - "*" # 本番ではフロントエンドドメインに制限
             ExposedHeaders:
@@ -131,6 +132,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref EntriesTable
+        - S3ReadPolicy:
+            BucketName: !Ref PhotosBucket
       Events:
         ApiEvent:
           Type: Api

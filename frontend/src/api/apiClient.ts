@@ -29,6 +29,7 @@ export type Entry = {
   purpose: string
   purpose_detail: string
   photo_url: string | null
+  photo_download_url?: string
   expires_at: number
 }
 
