@@ -354,9 +354,9 @@ export default function AdminApp() {
                     </td>
                     <td className="p-4 text-center">
                       <div className="w-10 h-10 mx-auto rounded bg-gray-100 flex items-center justify-center border border-gray-200 overflow-hidden">
-                        {entry.photo_url ? (
-                          <a href={entry.photo_url} target="_blank" rel="noopener noreferrer" className="w-full h-full block">
-                            <img src={entry.photo_url} alt="Face" className="w-full h-full object-cover hover:opacity-80 transition-opacity" />
+                        {(entry.photo_download_url || entry.photo_url) ? (
+                          <a href={entry.photo_download_url || entry.photo_url || '#'} target="_blank" rel="noopener noreferrer" className="w-full h-full block">
+                            <img src={entry.photo_download_url || entry.photo_url!} alt="Face" className="w-full h-full object-cover hover:opacity-80 transition-opacity" />
                           </a>
                         ) : (
                           <ImageIcon className="w-4 h-4 text-gray-400" />
@@ -385,13 +385,20 @@ export default function AdminApp() {
                       <div className="flex justify-center gap-3">
                         <button 
                           onClick={() => {
-                            if (entry.photo_url) {
-                              const ext = entry.photo_url.split('.').pop() || 'jpg'
+                            const urlStr = entry.photo_download_url || entry.photo_url
+                            if (urlStr) {
+                              let ext = 'jpg';
+                              try {
+                                const parsed = new URL(urlStr)
+                                ext = parsed.pathname.split('.').pop() || 'jpg'
+                              } catch(e) {
+                                ext = urlStr.split('.').pop() || 'jpg'
+                              }
                               const filename = `${entry.company_name}_${entry.visitor_name}_${entry.id.substring(0,6)}.${ext}`
-                              handleDownloadImage(entry.photo_url, filename)
+                              handleDownloadImage(urlStr, filename)
                             }
                           }}
-                          disabled={!entry.photo_url}
+                          disabled={!(entry.photo_download_url || entry.photo_url)}
                           className="text-gray-400 hover:text-[var(--primary)] transition-colors disabled:opacity-30 disabled:hover:text-gray-400" 
                           title="ダウンロード"
                         >

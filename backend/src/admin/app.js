@@ -1,6 +1,7 @@
-import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { S3Client, DeleteObjectsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3Client = new S3Client({});
 const ddbClient = new DynamoDBClient({});
@@ -36,10 +37,29 @@ export const listEntries = async (event) => {
             return !item.expires_at || item.expires_at > nowSeconds;
         });
 
+        const bucketName = process.env.PHOTO_BUCKET_NAME;
+
+        // 画像取得用のPresigned URLを生成
+        const itemsWithPresignedUrl = await Promise.all(activeItems.map(async (item) => {
+            if (item.photo_url) {
+                try {
+                    const command = new GetObjectCommand({
+                        Bucket: bucketName,
+                        Key: item.photo_url
+                    });
+                    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 * 60 }); // 1時間
+                    item.photo_download_url = signedUrl;
+                } catch (err) {
+                    console.error("Failed to generate presigned URL for", item.photo_url, err);
+                }
+            }
+            return item;
+        }));
+
         return {
             statusCode: 200,
             headers: CORS_HEADERS,
-            body: JSON.stringify(activeItems),
+            body: JSON.stringify(itemsWithPresignedUrl),
         };
 
     } catch (error) {
