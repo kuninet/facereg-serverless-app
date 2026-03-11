@@ -1,0 +1,210 @@
+openapi: 3.0.3
+info:
+  title: Facereg API
+  description: 顔写真登録アプリ (reception/admin) 用のバックエンドAPI仕様
+  version: 1.0.0
+servers:
+  - url: https://api.facereg.example.com/v1
+    description: 統合APIエンドポイント
+
+components:
+  securitySchemes:
+    AdminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 管理者用の簡易認証トークン（受付用APIは認証不要）
+
+  schemas:
+    EntryInput:
+      type: object
+      required:
+        - company_name
+        - visitor_name
+        - purpose
+        - photo_filename
+        - photo_content_type
+      properties:
+        company_name:
+          type: string
+          example: 〇〇株式会社
+        visitor_name:
+          type: string
+          example: 山田 太郎
+        purpose:
+          type: string
+          example: 商談
+        purpose_detail:
+          type: string
+          example: 新製品のご案内のため
+        photo_filename:
+          type: string
+          description: アップロード予定のファイル名
+          example: face.jpg
+        photo_content_type:
+          type: string
+          description: 画像のMIMEタイプ（S3の署名付きURL生成に必須）
+          example: image/jpeg
+
+    EntryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        company_name:
+          type: string
+        visitor_name:
+          type: string
+        purpose:
+          type: string
+        purpose_detail:
+          type: string
+        photo_url:
+          type: string
+          description: 画像表示用URL（CloudFront経由）
+
+    PresignedUrlResponse:
+      type: object
+      properties:
+        upload_url:
+          type: string
+          description: S3へ直接PUTするための署名付きURL
+        photo_key:
+          type: string
+          description: S3オブジェクトキーとしての保存パス
+        entry_id:
+          type: string
+          description: 発行されたエントリーID
+
+paths:
+  # ---------------------------------------------------------
+  # 受付アプリ用 API (Unauthenticated)
+  # ---------------------------------------------------------
+  /entries/initialize:
+    post:
+      summary: 写真アップロード用URLの取得
+      description: >
+        S3に画像を直接アップロードするための「署名付きURL(Presigned URL)」を発行します。
+        このAPIを叩いた時点ではまだDBに保存されません。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photo_filename, photo_content_type]
+              properties:
+                photo_filename:
+                  type: string
+                photo_content_type:
+                  type: string
+      responses:
+        '200':
+          description: 署名付きURLが正常に発行された
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignedUrlResponse'
+
+  /entries:
+    post:
+      summary: 受付エントリーの登録（完了処理）
+      description: >
+        写真のS3への直接アップロード（PUT）が成功した後、
+        クライアントがこのAPIを呼び出してDynamoDBにデータを登録します。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              allOf:
+                - $ref: '#/components/schemas/EntryInput'
+                - type: object
+                  required: [photo_key]
+                  properties:
+                    photo_key:
+                      type: string
+                      description: /initialize で受け取ったS3キー
+      responses:
+        '201':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryResponse'
+
+  # ---------------------------------------------------------
+  # 管理画面用 API (Authenticated)
+  # ---------------------------------------------------------
+  /admin/entries:
+    get:
+      summary: 受付エントリー一覧の取得
+      security:
+        - AdminAuth: []
+      description: DynamoDBから登録された受付一覧を取得します。
+      responses:
+        '200':
+          description: 一覧取得成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntryResponse'
+
+  /admin/entries/bulk-delete:
+    post:
+      summary: 受付エントリーの一括削除
+      security:
+        - AdminAuth: []
+      description: 選択された複数のIDを受け取り、DynamoDBのレコードおよびS3の写真を削除します。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: 削除成功
+
+  /admin/entries/export:
+    post:
+      summary: 一括ダウンロード (ZIP) 用の処理要求
+      security:
+        - AdminAuth: []
+      description: >
+        チェックされた項目群のZIP作成をバックグラウンド等で要求するか、
+        API Gateway経由でバイナリを同期的に返します（非同期処理+Presigned URLダウンロード通知が望ましい）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: ZIPダウンロード用URLの発行
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  download_url:
+                    type: string
