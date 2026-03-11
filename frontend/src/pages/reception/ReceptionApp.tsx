@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { Camera, Upload, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { apiClient } from '../../api/apiClient'
 
 type EntryFormData = {
   company_name: string
@@ -79,26 +80,52 @@ export default function ReceptionApp() {
     }
   }
 
-  // フォーム送信（モック）とキオスクリセット
+  // フォーム送信
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!photoPreview || !formData.company_name || !formData.visitor_name) return
 
     setIsSubmitting(true)
 
-    // TODO: ここで S3 Presigned URL 取得 -> S3 画像アップロード -> DynamoDB 登録 API を呼び出す
-    // 今回はモックとして2秒待機
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    try {
+      // 1. DataURLからBlobを生成
+      const res = await fetch(photoPreview)
+      const blob = await res.blob()
+      
+      // MIMEタイプから拡張子を決定
+      const mimeType = blob.type || 'image/jpeg'
+      const ext = mimeType.split('/')[1] || 'jpeg'
+      const filename = `photo.${ext}`
 
-    setIsSubmitting(false)
-    setIsSuccess(true)
+      // 2. S3 Presigned URL 取得
+      const initData = await apiClient.initializeUpload(filename, mimeType)
 
-    // キオスクモード: 3秒後に自動リセット
-    setTimeout(() => {
-      setFormData(INITIAL_FORM_DATA)
-      setPhotoPreview(null)
-      setIsSuccess(false)
-    }, 3000)
+      // 3. S3 画像アップロード
+      await apiClient.uploadPhotoToS3(initData, blob)
+
+      // 4. DynamoDB 登録
+      await apiClient.registerEntry({
+        company_name: formData.company_name,
+        visitor_name: formData.visitor_name,
+        purpose: formData.purpose,
+        purpose_detail: formData.purpose_detail,
+        photo_key: initData.photo_key
+      })
+
+      setIsSuccess(true)
+
+      // キオスクモード: 3秒後に自動リセット
+      setTimeout(() => {
+        setFormData(INITIAL_FORM_DATA)
+        setPhotoPreview(null)
+        setIsSuccess(false)
+      }, 3000)
+    } catch (err) {
+      console.error('Registration failed:', err)
+      alert(`登録に失敗しました。もう一度お試しください。\n詳細: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // 完了画面
