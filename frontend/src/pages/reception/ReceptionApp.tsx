@@ -102,20 +102,31 @@ export default function ReceptionApp() {
       const vWidth = video.videoWidth
       const vHeight = video.videoHeight
 
-      // クロップ範囲の計算 (中央を抜き出す)
-      const sWidth = vWidth / ZOOM_FACTOR
-      const sHeight = vHeight / ZOOM_FACTOR
-      const sx = (vWidth - sWidth) / 2
-      const sy = (vHeight - sHeight) / 2
+      // UIが aspect-[3/4] (縦長) なので、3:4のアスペクト比に合わせてクロップ領域を計算する
+      const targetAspect = 3 / 4
+      let cropWidth, cropHeight
+      
+      if (vWidth / vHeight > targetAspect) {
+        // ビデオが3:4より横長（例: 16:9）の場合、高さが基準
+        cropHeight = vHeight / ZOOM_FACTOR
+        cropWidth = cropHeight * targetAspect
+      } else {
+        // ビデオが3:4より縦長の場合、横が基準
+        cropWidth = vWidth / ZOOM_FACTOR
+        cropHeight = cropWidth / targetAspect
+      }
 
-      // キャンバスサイズはクロップ後のサイズ（または標準サイズ）に設定
-      canvas.width = sWidth
-      canvas.height = sHeight
+      const sx = (vWidth - cropWidth) / 2
+      const sy = (vHeight - cropHeight) / 2
+
+      // キャンバスを3:4のクロップサイズに設定
+      canvas.width = cropWidth
+      canvas.height = cropHeight
       
       const ctx = canvas.getContext('2d')
       if (ctx) {
-        // 中央部分を切り抜いて描画
-        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight)
+        // 中央部分を3:4で切り抜いて描画
+        ctx.drawImage(video, sx, sy, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         
         const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8)
         setPhotoPreview(photoDataUrl)
@@ -243,7 +254,7 @@ export default function ReceptionApp() {
 
               {/* Camera Live View (モバイルのみ) */}
               {isCapturing && !photoPreview && (
-                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black flex flex-col aspect-video">
+                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black flex flex-col aspect-[3/4]">
                   <video 
                     ref={videoRef} 
                     autoPlay 
@@ -266,8 +277,8 @@ export default function ReceptionApp() {
 
               {/* Photo Preview */}
               {photoPreview && (
-                <div className="relative w-full max-w-sm rounded-lg overflow-hidden shadow-md">
-                  <img src={photoPreview} alt="Preview" className="w-full h-auto" />
+                <div className="relative w-full max-w-sm rounded-lg overflow-hidden shadow-md aspect-[3/4]">
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => {
