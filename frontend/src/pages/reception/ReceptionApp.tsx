@@ -102,20 +102,22 @@ export default function ReceptionApp() {
       const vWidth = video.videoWidth
       const vHeight = video.videoHeight
 
-      // クロップ範囲の計算 (中央を抜き出す)
-      const sWidth = vWidth / ZOOM_FACTOR
-      const sHeight = vHeight / ZOOM_FACTOR
-      const sx = (vWidth - sWidth) / 2
-      const sy = (vHeight - sHeight) / 2
+      // UIが aspect-square (1:1) で object-cover になっているため、表示されるベースは短い辺に合わせた正方形
+      const minDim = Math.min(vWidth, vHeight)
 
-      // キャンバスサイズはクロップ後のサイズ（または標準サイズ）に設定
-      canvas.width = sWidth
-      canvas.height = sHeight
+      // デジタルズーム分をさらにクロップ
+      const cropSize = minDim / ZOOM_FACTOR
+      const sx = (vWidth - cropSize) / 2
+      const sy = (vHeight - cropSize) / 2
+
+      // キャンバスを正方形（クロップサイズ）に設定
+      canvas.width = cropSize
+      canvas.height = cropSize
       
       const ctx = canvas.getContext('2d')
       if (ctx) {
-        // 中央部分を切り抜いて描画
-        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight)
+        // 中央部分を切り抜いて正方形で描画
+        ctx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, cropSize, cropSize)
         
         const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8)
         setPhotoPreview(photoDataUrl)
@@ -243,7 +245,7 @@ export default function ReceptionApp() {
 
               {/* Camera Live View (モバイルのみ) */}
               {isCapturing && !photoPreview && (
-                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black flex flex-col aspect-video">
+                <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black flex flex-col aspect-square">
                   <video 
                     ref={videoRef} 
                     autoPlay 
@@ -266,8 +268,8 @@ export default function ReceptionApp() {
 
               {/* Photo Preview */}
               {photoPreview && (
-                <div className="relative w-full max-w-sm rounded-lg overflow-hidden shadow-md">
-                  <img src={photoPreview} alt="Preview" className="w-full h-auto" />
+                <div className="relative w-full max-w-sm rounded-lg overflow-hidden shadow-md aspect-square">
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => {
