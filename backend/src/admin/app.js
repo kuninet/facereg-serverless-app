@@ -7,17 +7,19 @@ const s3Client = new S3Client({});
 const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 
-const CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
+const getCorsHeaders = () => ({
+    "Access-Control-Allow-Origin": process.env.ALLOWED_CORS_ORIGIN || "https://example.invalid",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
-};
+});
 
 /**
  * データベースからのエントリー一覧取得API
  * @param {Object} event HTTP Gateway Event
  */
 export const listEntries = async (event) => {
+    const corsHeaders = getCorsHeaders();
+
     try {
         const tableName = process.env.TABLE_NAME;
 
@@ -58,7 +60,7 @@ export const listEntries = async (event) => {
 
         return {
             statusCode: 200,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify(itemsWithPresignedUrl),
         };
 
@@ -66,7 +68,7 @@ export const listEntries = async (event) => {
         console.error("Error in listEntries", error);
         return {
             statusCode: 500,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify({ error: "Failed to fetch entries." }),
         };
     }
@@ -77,6 +79,8 @@ export const listEntries = async (event) => {
  * @param {Object} event HTTP Gateway Event
  */
 export const bulkDelete = async (event) => {
+    const corsHeaders = getCorsHeaders();
+
     try {
         const body = JSON.parse(event.body || "{}");
         const { items } = body;
@@ -84,7 +88,7 @@ export const bulkDelete = async (event) => {
         if (!Array.isArray(items) || items.length === 0) {
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "Invalid or empty keys for deletion." })
             };
         }
@@ -94,7 +98,7 @@ export const bulkDelete = async (event) => {
         if (requestedIds.length === 0) {
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "Invalid or empty ids for deletion." })
             };
         }
@@ -102,7 +106,7 @@ export const bulkDelete = async (event) => {
         if (requestedIds.length > 25) {
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "A maximum of 25 entries can be deleted at once." })
             };
         }
@@ -126,7 +130,7 @@ export const bulkDelete = async (event) => {
         if (resolvedItems.length !== requestedIds.length) {
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "One or more entries were not found." })
             };
         }
@@ -163,7 +167,7 @@ export const bulkDelete = async (event) => {
 
         return {
             statusCode: 200,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify({ message: "Successfully deleted items." }),
         };
 
@@ -171,7 +175,7 @@ export const bulkDelete = async (event) => {
         console.error("Error in bulkDelete", error);
         return {
             statusCode: 500,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify({ error: "Failed to delete entries." }),
         };
     }

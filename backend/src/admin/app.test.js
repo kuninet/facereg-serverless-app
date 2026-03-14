@@ -13,6 +13,7 @@ describe('Admin API Tests', () => {
         docMock.reset();
         process.env.TABLE_NAME = 'MockTable';
         process.env.PHOTO_BUCKET_NAME = 'MockBucket';
+        process.env.ALLOWED_CORS_ORIGIN = 'https://admin.example.com';
     });
 
     it('listEntries should return active items and filter out expired items', async () => {
@@ -29,6 +30,7 @@ describe('Admin API Tests', () => {
         const event = {};
         const response = await listEntries(event);
         expect(response.statusCode).toBe(200);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://admin.example.com');
 
         const items = JSON.parse(response.body);
         expect(items.length).toBe(2);
@@ -41,6 +43,7 @@ describe('Admin API Tests', () => {
         };
         const response = await bulkDelete(event);
         expect(response.statusCode).toBe(400);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://admin.example.com');
     });
 
     it('bulkDelete should resolve photo_url from DynamoDB and delete matched entries only', async () => {
@@ -65,6 +68,7 @@ describe('Admin API Tests', () => {
         };
         const response = await bulkDelete(event);
         expect(response.statusCode).toBe(200);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://admin.example.com');
 
         expect(docMock.calls().length).toBe(2);
         expect(s3Mock.calls().length).toBe(1);
@@ -101,6 +105,7 @@ describe('Admin API Tests', () => {
         };
         const response = await bulkDelete(event);
         expect(response.statusCode).toBe(400);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://admin.example.com');
         expect(JSON.parse(response.body).error).toContain('not found');
         expect(s3Mock.calls().length).toBe(0);
     });

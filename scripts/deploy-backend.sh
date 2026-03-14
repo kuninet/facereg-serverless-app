@@ -11,6 +11,7 @@ DEPLOY_ENV_FILE=".env.deploy"
 
 EXISTING_ADMIN_AUTH_CREDENTIALS="${ADMIN_AUTH_CREDENTIALS:-}"
 EXISTING_UPLOAD_TOKEN_SECRET="${UPLOAD_TOKEN_SECRET:-}"
+EXISTING_ALLOWED_CORS_ORIGIN="${ALLOWED_CORS_ORIGIN:-}"
 
 if [ -f "$DEPLOY_ENV_FILE" ]; then
   set -a
@@ -24,6 +25,10 @@ fi
 
 if [ -n "$EXISTING_UPLOAD_TOKEN_SECRET" ]; then
   UPLOAD_TOKEN_SECRET="$EXISTING_UPLOAD_TOKEN_SECRET"
+fi
+
+if [ -n "$EXISTING_ALLOWED_CORS_ORIGIN" ]; then
+  ALLOWED_CORS_ORIGIN="$EXISTING_ALLOWED_CORS_ORIGIN"
 fi
 
 deploy_stack() {
@@ -42,7 +47,7 @@ deploy_stack() {
     --resolve-s3 \
     --capabilities CAPABILITY_IAM \
     --no-confirm-changeset \
-    --parameter-overrides AdminAuthCredentials="$ADMIN_AUTH_CREDENTIALS" UploadTokenSecret="$UPLOAD_TOKEN_SECRET" \
+    --parameter-overrides AdminAuthCredentials="$ADMIN_AUTH_CREDENTIALS" UploadTokenSecret="$UPLOAD_TOKEN_SECRET" AllowedCorsOrigin="$ALLOWED_CORS_ORIGIN" \
     --tags Project=facereg-app
 }
 
@@ -95,8 +100,8 @@ create_phase1_template() {
   ' template.yaml > "$PHASE1_TEMPLATE"
 }
 
-if [ -z "${ADMIN_AUTH_CREDENTIALS:-}" ] || [ -z "${UPLOAD_TOKEN_SECRET:-}" ]; then
-  echo "${DEPLOY_ENV_FILE} を作成するか、ADMIN_AUTH_CREDENTIALS と UPLOAD_TOKEN_SECRET 環境変数を設定してください。"
+if [ -z "${ADMIN_AUTH_CREDENTIALS:-}" ] || [ -z "${UPLOAD_TOKEN_SECRET:-}" ] || [ -z "${ALLOWED_CORS_ORIGIN:-}" ]; then
+  echo "${DEPLOY_ENV_FILE} を作成するか、ADMIN_AUTH_CREDENTIALS と UPLOAD_TOKEN_SECRET と ALLOWED_CORS_ORIGIN 環境変数を設定してください。"
   echo "例: cp .env.deploy.example .env.deploy"
   exit 1
 fi
