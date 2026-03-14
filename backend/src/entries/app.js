@@ -1,4 +1,5 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import crypto from "node:crypto";
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
@@ -13,6 +14,57 @@ const CORS_HEADERS = {
     "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
 };
 
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const UPLOAD_TOKEN_TTL_SECONDS = 5 * 60;
+const PHOTO_KEY_PATTERN = /^photos\/\d{4}-\d{2}-\d{2}\/([0-9a-f-]+)\.(jpeg|png|webp)$/i;
+
+const getUploadTokenSecret = () => process.env.UPLOAD_TOKEN_SECRET || "";
+
+const createUploadToken = ({ entryId, photoKey, expiresAt }) => {
+    const secret = getUploadTokenSecret();
+
+    if (!secret) {
+        throw new Error("UPLOAD_TOKEN_SECRET is not configured.");
+    }
+
+    const signature = crypto
+        .createHmac("sha256", secret)
+        .update(`${entryId}:${photoKey}:${expiresAt}`)
+        .digest("hex");
+
+    return `${expiresAt}.${signature}`;
+};
+
+const isValidUploadToken = ({ entryId, photoKey, uploadToken }) => {
+    const [expiresAtText, actualSignature] = String(uploadToken || "").split(".");
+    const expiresAt = Number.parseInt(expiresAtText, 10);
+
+    if (!expiresAtText || !actualSignature || !Number.isFinite(expiresAt)) {
+        return false;
+    }
+
+    if (expiresAt < Math.floor(Date.now() / 1000)) {
+        return false;
+    }
+
+    const expectedToken = createUploadToken({ entryId, photoKey, expiresAt });
+    const [, expectedSignature] = expectedToken.split(".");
+
+    if (!expectedSignature || expectedSignature.length !== actualSignature.length) {
+        return false;
+    }
+
+    return crypto.timingSafeEqual(
+        Buffer.from(actualSignature, "utf8"),
+        Buffer.from(expectedSignature, "utf8")
+    );
+};
+
+const extractEntryIdFromPhotoKey = (photoKey) => {
+    const match = String(photoKey || "").match(PHOTO_KEY_PATTERN);
+    return match ? match[1] : null;
+};
+
 /**
  * 署名付きアップロードURL（POST Policy付き）を発行するAPI
  * @param {Object} event HTTP Gateway Event
@@ -22,9 +74,7 @@ export const initializeUpload = async (event) => {
         const body = JSON.parse(event.body || "{}");
         const { photo_filename, photo_content_type } = body;
 
-        // 【セキュリティレビュー反映】対応するMIMEタイプを制限
-        const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-        if (!photo_content_type || !allowedTypes.includes(photo_content_type)) {
+        if (!photo_content_type || !ALLOWED_TYPES.includes(photo_content_type)) {
             return {
                 statusCode: 400,
                 headers: CORS_HEADERS,
@@ -33,13 +83,16 @@ export const initializeUpload = async (event) => {
         }
 
         const bucketName = process.env.PHOTO_BUCKET_NAME;
-        // ランダムなIDを生成（簡易的にタイムスタンプ+乱数）
-        const entryId = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-        // S3に保存するキーパス
+        const entryId = crypto.randomUUID();
         const extension = photo_content_type.split("/")[1];
         const photoKey = `photos/${new Date().toISOString().split('T')[0]}/${entryId}.${extension}`;
+        const uploadTokenExpiresAt = Math.floor(Date.now() / 1000) + UPLOAD_TOKEN_TTL_SECONDS;
+        const uploadToken = createUploadToken({
+            entryId,
+            photoKey,
+            expiresAt: uploadTokenExpiresAt,
+        });
 
-        // 【セキュリティレビュー反映】S3 POST Policyを利用してファイルサイズ制限 (Max: 10MB) と MIME 制約を付与
         const { url, fields } = await createPresignedPost(s3Client, {
             Bucket: bucketName,
             Key: photoKey,
@@ -60,7 +113,9 @@ export const initializeUpload = async (event) => {
                 upload_url: url, // フォームのPOST先URL
                 fields: fields,  // フォームに含める追加パラメータ
                 photo_key: photoKey,
-                entry_id: entryId
+                entry_id: entryId,
+                upload_token: uploadToken,
+                upload_token_expires_at: uploadTokenExpiresAt,
             }),
         };
 
@@ -81,8 +136,7 @@ export const initializeUpload = async (event) => {
 export const registerEntry = async (event) => {
     try {
         const body = JSON.parse(event.body || "{}");
-        // OpenAPIの必須項目チェック
-        const requiredParams = ["company_name", "visitor_name", "purpose", "photo_key"];
+        const requiredParams = ["company_name", "visitor_name", "purpose", "photo_key", "entry_id", "upload_token"];
         for (const param of requiredParams) {
             if (!body[param]) {
                 return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: `Missing required parameter: ${param}` }) };
@@ -90,6 +144,43 @@ export const registerEntry = async (event) => {
         }
 
         const tableName = process.env.TABLE_NAME;
+        const bucketName = process.env.PHOTO_BUCKET_NAME;
+        const extractedEntryId = extractEntryIdFromPhotoKey(body.photo_key);
+
+        if (!extractedEntryId || extractedEntryId !== body.entry_id) {
+            return {
+                statusCode: 400,
+                headers: CORS_HEADERS,
+                body: JSON.stringify({ error: "photo_key does not match entry_id." }),
+            };
+        }
+
+        if (!isValidUploadToken({
+            entryId: body.entry_id,
+            photoKey: body.photo_key,
+            uploadToken: body.upload_token,
+        })) {
+            return {
+                statusCode: 400,
+                headers: CORS_HEADERS,
+                body: JSON.stringify({ error: "Invalid or expired upload token." }),
+            };
+        }
+
+        try {
+            await s3Client.send(new HeadObjectCommand({
+                Bucket: bucketName,
+                Key: body.photo_key,
+            }));
+        } catch (error) {
+            console.error("Uploaded photo was not found", body.photo_key, error);
+            return {
+                statusCode: 400,
+                headers: CORS_HEADERS,
+                body: JSON.stringify({ error: "Uploaded photo was not found." }),
+            };
+        }
+
         const nowMs = Date.now();
         const nowIso = new Date(nowMs).toISOString();
 
@@ -109,7 +200,7 @@ export const registerEntry = async (event) => {
             visitor_name: body.visitor_name,
             purpose: body.purpose,
             purpose_detail: body.purpose_detail || "",
-            photo_url: body.photo_key, // フロントエンドでCloudFront等から配信する際に利用できるキー
+            photo_url: body.photo_key,
             expires_at: TTL_SECONDS // AWSのTTLメカニズム用
         };
 

@@ -9,10 +9,21 @@ PHASE1_TEMPLATE=".codex-bootstrap-admin-auth-template.yaml"
 PHASE1_BUILD_DIR=".aws-sam/bootstrap-build"
 DEPLOY_ENV_FILE=".env.deploy"
 
-if [ -z "${ADMIN_AUTH_CREDENTIALS:-}" ] && [ -f "$DEPLOY_ENV_FILE" ]; then
+EXISTING_ADMIN_AUTH_CREDENTIALS="${ADMIN_AUTH_CREDENTIALS:-}"
+EXISTING_UPLOAD_TOKEN_SECRET="${UPLOAD_TOKEN_SECRET:-}"
+
+if [ -f "$DEPLOY_ENV_FILE" ]; then
   set -a
   . "./${DEPLOY_ENV_FILE}"
   set +a
+fi
+
+if [ -n "$EXISTING_ADMIN_AUTH_CREDENTIALS" ]; then
+  ADMIN_AUTH_CREDENTIALS="$EXISTING_ADMIN_AUTH_CREDENTIALS"
+fi
+
+if [ -n "$EXISTING_UPLOAD_TOKEN_SECRET" ]; then
+  UPLOAD_TOKEN_SECRET="$EXISTING_UPLOAD_TOKEN_SECRET"
 fi
 
 deploy_stack() {
@@ -31,7 +42,7 @@ deploy_stack() {
     --resolve-s3 \
     --capabilities CAPABILITY_IAM \
     --no-confirm-changeset \
-    --parameter-overrides AdminAuthCredentials="$ADMIN_AUTH_CREDENTIALS" \
+    --parameter-overrides AdminAuthCredentials="$ADMIN_AUTH_CREDENTIALS" UploadTokenSecret="$UPLOAD_TOKEN_SECRET" \
     --tags Project=facereg-app
 }
 
@@ -84,8 +95,8 @@ create_phase1_template() {
   ' template.yaml > "$PHASE1_TEMPLATE"
 }
 
-if [ -z "${ADMIN_AUTH_CREDENTIALS:-}" ]; then
-  echo "${DEPLOY_ENV_FILE} を作成するか、ADMIN_AUTH_CREDENTIALS 環境変数を設定してください。"
+if [ -z "${ADMIN_AUTH_CREDENTIALS:-}" ] || [ -z "${UPLOAD_TOKEN_SECRET:-}" ]; then
+  echo "${DEPLOY_ENV_FILE} を作成するか、ADMIN_AUTH_CREDENTIALS と UPLOAD_TOKEN_SECRET 環境変数を設定してください。"
   echo "例: cp .env.deploy.example .env.deploy"
   exit 1
 fi

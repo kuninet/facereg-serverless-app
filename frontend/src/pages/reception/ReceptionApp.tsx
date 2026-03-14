@@ -176,7 +176,9 @@ export default function ReceptionApp() {
         visitor_name: formData.visitor_name,
         purpose: formData.purpose,
         purpose_detail: formData.purpose_detail,
-        photo_key: initData.photo_key
+        photo_key: initData.photo_key,
+        entry_id: initData.entry_id,
+        upload_token: initData.upload_token
       })
 
       setIsSuccess(true)

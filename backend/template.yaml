@@ -9,6 +9,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: 管理画面API用のBasic認証情報。user:password形式、複数はカンマ区切り。
+  UploadTokenSecret:
+    Type: String
+    NoEcho: true
+    Description: 受付画面のアップロード完了トークン署名に使う秘密値。
 
 Globals:
   Function:
@@ -16,9 +20,10 @@ Globals:
     MemorySize: 256
     Tracing: PassThrough
     Environment:
-      Variables:
-        TABLE_NAME: !Ref EntriesTable
-        PHOTO_BUCKET_NAME: !Ref PhotosBucket
+        Variables:
+          TABLE_NAME: !Ref EntriesTable
+          PHOTO_BUCKET_NAME: !Ref PhotosBucket
+          UPLOAD_TOKEN_SECRET: !Ref UploadTokenSecret
   Api:
     TracingEnabled: false
     # CORS はCloudFront経由の同一オリジンアクセスのため不要
@@ -153,6 +158,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntriesTable
+        - S3ReadPolicy:
+            BucketName: !Ref PhotosBucket
       Events:
         ApiEvent:
           Type: Api

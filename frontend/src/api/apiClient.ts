@@ -27,6 +27,8 @@ export type InitializeUploadResponse = {
   fields: Record<string, string>
   photo_key: string
   entry_id: string
+  upload_token: string
+  upload_token_expires_at: number
 }
 
 export type RegisterEntryRequest = {
@@ -35,6 +37,8 @@ export type RegisterEntryRequest = {
   purpose: string
   purpose_detail?: string
   photo_key: string
+  entry_id: string
+  upload_token: string
 }
 
 export type Entry = {
