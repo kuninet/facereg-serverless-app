@@ -7,6 +7,13 @@ REGION="ap-northeast-1"
 STACK_NAME="facereg-app"
 PHASE1_TEMPLATE=".codex-bootstrap-admin-auth-template.yaml"
 PHASE1_BUILD_DIR=".aws-sam/bootstrap-build"
+DEPLOY_ENV_FILE=".env.deploy"
+
+if [ -z "${ADMIN_AUTH_CREDENTIALS:-}" ] && [ -f "$DEPLOY_ENV_FILE" ]; then
+  set -a
+  . "./${DEPLOY_ENV_FILE}"
+  set +a
+fi
 
 deploy_stack() {
   local template_file="$1"
@@ -78,7 +85,8 @@ create_phase1_template() {
 }
 
 if [ -z "${ADMIN_AUTH_CREDENTIALS:-}" ]; then
-  echo "ADMIN_AUTH_CREDENTIALS 環境変数を設定してください。例: export ADMIN_AUTH_CREDENTIALS='admin:strong-password'"
+  echo "${DEPLOY_ENV_FILE} を作成するか、ADMIN_AUTH_CREDENTIALS 環境変数を設定してください。"
+  echo "例: cp .env.deploy.example .env.deploy"
   exit 1
 fi
 
