@@ -1,0 +1,10 @@
+{
+  "name": "facereg-admin-authorizer",
+  "version": "1.0.0",
+  "description": "Basic auth Lambda authorizer for admin APIs",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  }
+}

@@ -11,9 +11,8 @@ components:
   securitySchemes:
     AdminAuth:
       type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: 管理者用の簡易認証トークン（受付用APIは認証不要）
+      scheme: basic
+      description: 管理者用の Basic 認証。Authorization ヘッダで ID / パスワードを送る（受付用APIは認証不要）
 
   schemas:
     EntryInput:
@@ -148,7 +147,7 @@ paths:
       summary: 受付エントリー一覧の取得
       security:
         - AdminAuth: []
-      description: DynamoDBから登録された受付一覧を取得します。
+      description: Lambda Authorizer による Basic 認証を通過した管理者だけが、DynamoDBから登録された受付一覧を取得します。
       responses:
         '200':
           description: 一覧取得成功
@@ -158,28 +157,39 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/EntryResponse'
+        '401':
+          description: 認証失敗
 
   /admin/entries/bulk-delete:
     post:
       summary: 受付エントリーの一括削除
       security:
         - AdminAuth: []
-      description: 選択された複数のIDを受け取り、DynamoDBのレコードおよびS3の写真を削除します。
+      description: Lambda Authorizer による Basic 認証を通過した管理者だけが、選択された受付データとS3上の写真を削除します。
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ids]
+              required: [items]
               properties:
-                ids:
+                items:
                   type: array
                   items:
-                    type: string
+                    type: object
+                    required: [id]
+                    properties:
+                      id:
+                        type: string
+                      photo_url:
+                        type: string
+                        nullable: true
       responses:
         '200':
           description: 削除成功
+        '401':
+          description: 認証失敗
 
   /admin/entries/export:
     post:

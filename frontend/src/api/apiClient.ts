@@ -4,6 +4,24 @@
 
 const API_BASE = '/v1' // CloudFrontでの同ドメインプロキシ、ローカルDevサーバプロキシを利用
 
+export class ApiClientError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiClientError'
+    this.status = status
+  }
+}
+
+export const createAdminAuthHeader = (userId: string, password: string) =>
+  `Basic ${btoa(`${userId}:${password}`)}`
+
+const throwApiError = async (res: Response, fallbackMessage: string) => {
+  const text = await res.text()
+  throw new ApiClientError(text || fallbackMessage, res.status)
+}
+
 export type InitializeUploadResponse = {
   upload_url: string
   fields: Record<string, string>
@@ -95,13 +113,15 @@ export const apiClient = {
   /**
    * エントリーの一覧取得（管理画面用）
    */
-  async listEntries(): Promise<Entry[]> {
+  async listEntries(authHeader: string): Promise<Entry[]> {
     const res = await fetch(`${API_BASE}/admin/entries`, {
-      method: 'GET'
+      method: 'GET',
+      headers: {
+        Authorization: authHeader
+      }
     })
     if (!res.ok) {
-        const text = await res.text()
-        throw new Error(`Failed to fetch entries: ${text}`)
+      await throwApiError(res, 'Failed to fetch entries')
     }
     return res.json()
   },
@@ -109,15 +129,17 @@ export const apiClient = {
   /**
    * エントリーの一括削除（管理画面用）
    */
-  async bulkDeleteEntries(items: { id: string; photo_url: string | null }[]): Promise<void> {
+  async bulkDeleteEntries(items: { id: string; photo_url: string | null }[], authHeader: string): Promise<void> {
     const res = await fetch(`${API_BASE}/admin/entries/bulk-delete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader
+      },
       body: JSON.stringify({ items })
     })
     if (!res.ok) {
-        const text = await res.text()
-        throw new Error(`Failed to bulk delete entries: ${text}`)
+      await throwApiError(res, 'Failed to bulk delete entries')
     }
   }
 }
