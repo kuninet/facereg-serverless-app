@@ -24,6 +24,7 @@ describe('Entries API Tests', () => {
         process.env.TABLE_NAME = 'MockTable';
         process.env.PHOTO_BUCKET_NAME = 'MockBucket';
         process.env.UPLOAD_TOKEN_SECRET = 'test-upload-token-secret';
+        process.env.ALLOWED_CORS_ORIGIN = 'https://app.example.com';
     });
 
     it('initializeUpload should return 400 if Content-Type is invalid', async () => {
@@ -32,6 +33,7 @@ describe('Entries API Tests', () => {
         };
         const response = await initializeUpload(event);
         expect(response.statusCode).toBe(400);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://app.example.com');
         expect(JSON.parse(response.body).error).toContain('Unsupported or missing Content-Type');
     });
 
@@ -41,6 +43,7 @@ describe('Entries API Tests', () => {
         };
         const response = await initializeUpload(event);
         expect(response.statusCode).toBe(200);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://app.example.com');
 
         const body = JSON.parse(response.body);
         expect(body.upload_url).toBe('https://mock-presigned-url');
@@ -57,6 +60,7 @@ describe('Entries API Tests', () => {
         };
         const response = await registerEntry(event);
         expect(response.statusCode).toBe(400);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://app.example.com');
     });
 
     it('registerEntry should return 201 and save to DynamoDB for valid payload', async () => {
@@ -80,6 +84,7 @@ describe('Entries API Tests', () => {
         };
         const response = await registerEntry(event);
         expect(response.statusCode).toBe(201);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://app.example.com');
 
         const body = JSON.parse(response.body);
         expect(body.pk).toBe('ENTRY');
@@ -104,6 +109,7 @@ describe('Entries API Tests', () => {
 
         const response = await registerEntry(event);
         expect(response.statusCode).toBe(400);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://app.example.com');
         expect(JSON.parse(response.body).error).toContain('Invalid or expired upload token');
     });
 
@@ -128,6 +134,7 @@ describe('Entries API Tests', () => {
 
         const response = await registerEntry(event);
         expect(response.statusCode).toBe(400);
+        expect(response.headers["Access-Control-Allow-Origin"]).toBe('https://app.example.com');
         expect(JSON.parse(response.body).error).toContain('Uploaded photo was not found');
     });
 });

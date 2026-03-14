@@ -8,11 +8,11 @@ const s3Client = new S3Client({});
 const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 
-const CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
+const getCorsHeaders = () => ({
+    "Access-Control-Allow-Origin": process.env.ALLOWED_CORS_ORIGIN || "https://example.invalid",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
-};
+});
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const UPLOAD_TOKEN_TTL_SECONDS = 5 * 60;
@@ -70,6 +70,8 @@ const extractEntryIdFromPhotoKey = (photoKey) => {
  * @param {Object} event HTTP Gateway Event
  */
 export const initializeUpload = async (event) => {
+    const corsHeaders = getCorsHeaders();
+
     try {
         const body = JSON.parse(event.body || "{}");
         const { photo_filename, photo_content_type } = body;
@@ -77,7 +79,7 @@ export const initializeUpload = async (event) => {
         if (!photo_content_type || !ALLOWED_TYPES.includes(photo_content_type)) {
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "Unsupported or missing Content-Type (Only JPEG, PNG, WEBP are allowed)." }),
             };
         }
@@ -108,7 +110,7 @@ export const initializeUpload = async (event) => {
 
         return {
             statusCode: 200,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify({
                 upload_url: url, // フォームのPOST先URL
                 fields: fields,  // フォームに含める追加パラメータ
@@ -123,7 +125,7 @@ export const initializeUpload = async (event) => {
         console.error("Error in initializeUpload", error);
         return {
             statusCode: 500,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify({ error: "Failed to generate presigned URL." }),
         };
     }
@@ -134,12 +136,14 @@ export const initializeUpload = async (event) => {
  * @param {Object} event HTTP Gateway Event
  */
 export const registerEntry = async (event) => {
+    const corsHeaders = getCorsHeaders();
+
     try {
         const body = JSON.parse(event.body || "{}");
         const requiredParams = ["company_name", "visitor_name", "purpose", "photo_key", "entry_id", "upload_token"];
         for (const param of requiredParams) {
             if (!body[param]) {
-                return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: `Missing required parameter: ${param}` }) };
+                return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: `Missing required parameter: ${param}` }) };
             }
         }
 
@@ -150,7 +154,7 @@ export const registerEntry = async (event) => {
         if (!extractedEntryId || extractedEntryId !== body.entry_id) {
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "photo_key does not match entry_id." }),
             };
         }
@@ -162,7 +166,7 @@ export const registerEntry = async (event) => {
         })) {
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "Invalid or expired upload token." }),
             };
         }
@@ -176,7 +180,7 @@ export const registerEntry = async (event) => {
             console.error("Uploaded photo was not found", body.photo_key, error);
             return {
                 statusCode: 400,
-                headers: CORS_HEADERS,
+                headers: corsHeaders,
                 body: JSON.stringify({ error: "Uploaded photo was not found." }),
             };
         }
@@ -211,7 +215,7 @@ export const registerEntry = async (event) => {
 
         return {
             statusCode: 201,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify(item),
         };
 
@@ -219,7 +223,7 @@ export const registerEntry = async (event) => {
         console.error("Error in registerEntry", error);
         return {
             statusCode: 500,
-            headers: CORS_HEADERS,
+            headers: corsHeaders,
             body: JSON.stringify({ error: "Failed to save entry." }),
         };
     }

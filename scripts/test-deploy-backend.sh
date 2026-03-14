@@ -128,21 +128,22 @@ run_case() {
     TEST_STATE_FILE="$STATE_FILE" \
     ADMIN_AUTH_CREDENTIALS="admin:test-password" \
     UPLOAD_TOKEN_SECRET="test-upload-token-secret" \
+    ALLOWED_CORS_ORIGIN="https://app.example.com" \
     ./scripts/deploy-backend.sh >/dev/null
   )
 
   if [ "$label" = "initial" ]; then
     assert_count "aws logs delete-log-group" 4
     assert_contains "sam build --template-file .codex-bootstrap-admin-auth-template.yaml --build-dir .aws-sam/bootstrap-build"
-    assert_contains "sam deploy --template-file .aws-sam/bootstrap-build/template.yaml --stack-name facereg-app --region ap-northeast-1 --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --parameter-overrides AdminAuthCredentials=admin:test-password UploadTokenSecret=test-upload-token-secret --tags Project=facereg-app"
+    assert_contains "sam deploy --template-file .aws-sam/bootstrap-build/template.yaml --stack-name facereg-app --region ap-northeast-1 --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --parameter-overrides AdminAuthCredentials=admin:test-password UploadTokenSecret=test-upload-token-secret AllowedCorsOrigin=https://app.example.com --tags Project=facereg-app"
     assert_contains "sam build --template-file template.yaml --build-dir .aws-sam/build"
-    assert_contains "sam deploy --template-file .aws-sam/build/template.yaml --stack-name facereg-app --region ap-northeast-1 --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --parameter-overrides AdminAuthCredentials=admin:test-password UploadTokenSecret=test-upload-token-secret --tags Project=facereg-app"
+    assert_contains "sam deploy --template-file .aws-sam/build/template.yaml --stack-name facereg-app --region ap-northeast-1 --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --parameter-overrides AdminAuthCredentials=admin:test-password UploadTokenSecret=test-upload-token-secret AllowedCorsOrigin=https://app.example.com --tags Project=facereg-app"
     assert_count "sam build" 2
     assert_count "sam deploy" 2
   else
     assert_count "aws logs delete-log-group" 0
     assert_contains "sam build --template-file template.yaml --build-dir .aws-sam/build"
-    assert_contains "sam deploy --template-file .aws-sam/build/template.yaml --stack-name facereg-app --region ap-northeast-1 --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --parameter-overrides AdminAuthCredentials=admin:test-password UploadTokenSecret=test-upload-token-secret --tags Project=facereg-app"
+    assert_contains "sam deploy --template-file .aws-sam/build/template.yaml --stack-name facereg-app --region ap-northeast-1 --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --parameter-overrides AdminAuthCredentials=admin:test-password UploadTokenSecret=test-upload-token-secret AllowedCorsOrigin=https://app.example.com --tags Project=facereg-app"
     assert_count "sam build" 1
     assert_count "sam deploy" 1
   fi
