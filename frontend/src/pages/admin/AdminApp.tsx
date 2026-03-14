@@ -132,7 +132,7 @@ export default function AdminApp() {
   const isAllCurrentPageSelected = paginatedEntries.length > 0 && paginatedEntries.every(e => selectedIds.has(e.id))
 
   // 削除処理 (単一・複数)
-  const handleDelete = async (itemsToDelete: {id: string, photo_url: string | null}[]) => {
+  const handleDelete = async (itemsToDelete: {id: string}[]) => {
     if (!window.confirm(`${itemsToDelete.length}件のデータを削除します。よろしいですか？`)) return
     
     try {
@@ -339,7 +339,7 @@ export default function AdminApp() {
               <button 
                 disabled={selectedIds.size === 0 || isLoading}
                 onClick={() => {
-                  const targets = entries.filter(e => selectedIds.has(e.id)).map(e => ({ id: e.id, photo_url: e.photo_url }))
+                  const targets = entries.filter(e => selectedIds.has(e.id)).map(e => ({ id: e.id }))
                   handleDelete(targets)
                 }}
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-md text-sm hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
@@ -444,7 +444,7 @@ export default function AdminApp() {
                           <Download className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => handleDelete([{id: entry.id, photo_url: entry.photo_url}])}
+                          onClick={() => handleDelete([{id: entry.id}])}
                           disabled={isLoading}
                           className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-30" 
                           title="削除"

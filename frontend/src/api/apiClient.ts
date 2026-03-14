@@ -133,7 +133,7 @@ export const apiClient = {
   /**
    * エントリーの一括削除（管理画面用）
    */
-  async bulkDeleteEntries(items: { id: string; photo_url: string | null }[], authHeader: string): Promise<void> {
+  async bulkDeleteEntries(items: { id: string }[], authHeader: string): Promise<void> {
     const res = await fetch(`${API_BASE}/admin/entries/bulk-delete`, {
       method: 'POST',
       headers: {
