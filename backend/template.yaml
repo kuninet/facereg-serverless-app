@@ -59,6 +59,15 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "facereg-photos-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders:
@@ -77,6 +86,27 @@ Resources:
           - Id: AutoDeletePhotosAfter7Days
             Status: Enabled
             ExpirationInDays: 7 # アップロードから7日後に自動削除
+      Tags:
+        - Key: Project
+          Value: facereg-app
+
+  PhotosBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PhotosBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt PhotosBucket.Arn
+              - !Sub "${PhotosBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
 
   # -------------------------------------------------------------------
   # 3. HTTP API (API Gateway)
