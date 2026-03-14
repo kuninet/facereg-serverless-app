@@ -26,3 +26,5 @@ aws cloudformation describe-stacks \
   --region "$REGION" \
   --query "Stacks[0].Outputs" \
   --output table
+
+echo "不要期間は ./scripts/destroy-stack.sh でスタックを削除し、継続課金を避けてください。"
