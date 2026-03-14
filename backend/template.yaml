@@ -8,13 +8,13 @@ Globals:
   Function:
     Timeout: 10
     MemorySize: 256
-    Tracing: Active
+    Tracing: PassThrough
     Environment:
       Variables:
         TABLE_NAME: !Ref EntriesTable
         PHOTO_BUCKET_NAME: !Ref PhotosBucket
   Api:
-    TracingEnabled: true
+    TracingEnabled: false
     # CORS はCloudFront経由の同一オリジンアクセスのため不要
     # カスタムドメイン対応時に必要に応じて再設定
 
@@ -102,6 +102,14 @@ Resources:
             Method: post
             RestApiId: !Ref FaceregApi
 
+  InitializeUploadLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${InitializeUploadFunction}"
+      RetentionInDays: 7
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
   RegisterEntryFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -120,6 +128,14 @@ Resources:
             Path: /entries
             Method: post
             RestApiId: !Ref FaceregApi
+
+  RegisterEntryLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${RegisterEntryFunction}"
+      RetentionInDays: 7
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
 
   ListEntriesFunction:
     Type: AWS::Serverless::Function
@@ -142,6 +158,14 @@ Resources:
             Method: get
             RestApiId: !Ref FaceregApi
 
+  ListEntriesLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ListEntriesFunction}"
+      RetentionInDays: 7
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
   BulkDeleteFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -163,6 +187,14 @@ Resources:
             Method: post
             RestApiId: !Ref FaceregApi
 
+  BulkDeleteLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${BulkDeleteFunction}"
+      RetentionInDays: 7
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
   # -------------------------------------------------------------------
   # 5. フロントエンド配信用 S3 Bucket
   # -------------------------------------------------------------------
@@ -175,6 +207,12 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
       Tags:
         - Key: Project
           Value: facereg-app
@@ -275,4 +313,3 @@ Outputs:
   CloudFrontDistributionId:
     Description: "CloudFront Distribution ID"
     Value: !Ref CloudFrontDistribution
-
