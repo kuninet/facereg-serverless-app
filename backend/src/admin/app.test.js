@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { listEntries, bulkDelete } from './app.js';
 import { mockClient } from 'aws-sdk-client-mock';
 import { S3Client, DeleteObjectsCommand } from '@aws-sdk/client-s3';
-import { DynamoDBDocumentClient, QueryCommand, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, BatchGetCommand, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
 
 const s3Mock = mockClient(S3Client);
 const docMock = mockClient(DynamoDBDocumentClient);
@@ -43,36 +43,65 @@ describe('Admin API Tests', () => {
         expect(response.statusCode).toBe(400);
     });
 
-    it('bulkDelete should trigger DynamoDB BatchWrite and S3 DeleteObjects', async () => {
+    it('bulkDelete should resolve photo_url from DynamoDB and delete matched entries only', async () => {
+        docMock.on(BatchGetCommand).resolves({
+            Responses: {
+                MockTable: [
+                    { id: 'key1', pk: 'ENTRY', sk: 'key1', photo_url: 'photos/1.jpg' },
+                    { id: 'key2', pk: 'ENTRY', sk: 'key2', photo_url: 'photos/2.jpg' }
+                ]
+            }
+        });
         docMock.on(BatchWriteCommand).resolves({});
         s3Mock.on(DeleteObjectsCommand).resolves({});
 
         const event = {
             body: JSON.stringify({
                 items: [
-                    { id: 'key1', photo_url: 'photos/1.jpg' },
-                    { id: 'key2', photo_url: 'photos/2.jpg' }
+                    { id: 'key1', photo_url: 'photos/evil.jpg' },
+                    { id: 'key2', photo_url: 'photos/also-evil.jpg' }
                 ]
             })
         };
         const response = await bulkDelete(event);
         expect(response.statusCode).toBe(200);
 
-        // APIコールの確認
-        expect(docMock.calls().length).toBe(1);
+        expect(docMock.calls().length).toBe(2);
         expect(s3Mock.calls().length).toBe(1);
 
+        const batchGetCall = docMock.call(0);
+        expect(batchGetCall.args[0].input.RequestItems['MockTable'].Keys).toEqual([
+            { pk: 'ENTRY', sk: 'key1' },
+            { pk: 'ENTRY', sk: 'key2' }
+        ]);
+
         const s3Call = s3Mock.call(0);
-        // DeleteObjectsCommand のパラメータ検証
         expect(s3Call.args[0].input.Delete.Objects).toEqual([
             { Key: 'photos/1.jpg' },
             { Key: 'photos/2.jpg' }
         ]);
 
-        const ddbCall = docMock.call(0);
-        // BatchWriteCommand のパラメータ検証
+        const ddbCall = docMock.call(1);
         const reqItems = ddbCall.args[0].input.RequestItems['MockTable'];
         expect(reqItems.length).toBe(2);
         expect(reqItems[0].DeleteRequest.Key.sk).toBe('key1');
+    });
+
+    it('bulkDelete should return 400 when requested ids are not found', async () => {
+        docMock.on(BatchGetCommand).resolves({
+            Responses: {
+                MockTable: [{ id: 'key1', pk: 'ENTRY', sk: 'key1', photo_url: 'photos/1.jpg' }]
+            }
+        });
+
+        const event = {
+            body: JSON.stringify({
+                items: [{ id: 'key1' }, { id: 'missing-key' }]
+            })
+        };
+        const response = await bulkDelete(event);
+        expect(response.statusCode).toBe(400);
+        expect(JSON.parse(response.body).error).toContain('not found');
+        expect(s3Mock.calls().length).toBe(0);
     });
 });

@@ -1,6 +1,6 @@
 import { S3Client, DeleteObjectsCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, BatchGetCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3Client = new S3Client({});
@@ -79,7 +79,7 @@ export const listEntries = async (event) => {
 export const bulkDelete = async (event) => {
     try {
         const body = JSON.parse(event.body || "{}");
-        const { items } = body; // 削除対象のオブジェクト配列 [{ id: "...", photo_url: "..." }, ...] を期待
+        const { items } = body;
 
         if (!Array.isArray(items) || items.length === 0) {
             return {
@@ -89,16 +89,53 @@ export const bulkDelete = async (event) => {
             };
         }
 
+        const requestedIds = [...new Set(items.map(item => item?.id).filter(id => typeof id === "string" && id.length > 0))];
+
+        if (requestedIds.length === 0) {
+            return {
+                statusCode: 400,
+                headers: CORS_HEADERS,
+                body: JSON.stringify({ error: "Invalid or empty ids for deletion." })
+            };
+        }
+
+        if (requestedIds.length > 25) {
+            return {
+                statusCode: 400,
+                headers: CORS_HEADERS,
+                body: JSON.stringify({ error: "A maximum of 25 entries can be deleted at once." })
+            };
+        }
+
         const tableName = process.env.TABLE_NAME;
         const bucketName = process.env.PHOTO_BUCKET_NAME;
 
-        // 1. DynamoDBからのバッチ削除 (最大25件ずつの制約に注意)
-        // ここでは簡易的に25件以下である前提（キオスク運用想定）で実装。実弾ではchunk分割が必要
-        const deleteRequests = items.map(item => ({
+        const batchGetResponse = await docClient.send(new BatchGetCommand({
+            RequestItems: {
+                [tableName]: {
+                    Keys: requestedIds.map(id => ({
+                        pk: "ENTRY",
+                        sk: id
+                    }))
+                }
+            }
+        }));
+
+        const resolvedItems = batchGetResponse.Responses?.[tableName] || [];
+
+        if (resolvedItems.length !== requestedIds.length) {
+            return {
+                statusCode: 400,
+                headers: CORS_HEADERS,
+                body: JSON.stringify({ error: "One or more entries were not found." })
+            };
+        }
+
+        const deleteRequests = resolvedItems.map(item => ({
             DeleteRequest: {
                 Key: {
                     pk: "ENTRY",
-                    sk: item.id  // tableのSKには item.id がそのまま入っている前提
+                    sk: item.id
                 }
             }
         }));
@@ -106,13 +143,12 @@ export const bulkDelete = async (event) => {
         if (deleteRequests.length > 0) {
             await docClient.send(new BatchWriteCommand({
                 RequestItems: {
-                    [tableName]: deleteRequests.slice(0, 25) // OpenAPI側の要件で25件以上の場合はループ等が必要
+                    [tableName]: deleteRequests
                 }
             }));
         }
 
-        // 2. S3からの画像バッチ削除
-        const s3Objects = items
+        const s3Objects = resolvedItems
             .filter(item => item.photo_url)
             .map(item => ({ Key: item.photo_url }));
 
@@ -120,7 +156,7 @@ export const bulkDelete = async (event) => {
             await s3Client.send(new DeleteObjectsCommand({
                 Bucket: bucketName,
                 Delete: {
-                    Objects: s3Objects.slice(0, 1000) // S3 DeleteObjectsは最大1000件
+                    Objects: s3Objects
                 }
             }));
         }
