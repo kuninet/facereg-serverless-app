@@ -4,6 +4,12 @@ Description: >
   facereg-serverless-app
   Backend infrastructure for Face Registration App.
 
+Parameters:
+  AdminAuthCredentials:
+    Type: String
+    NoEcho: true
+    Description: 管理画面API用のBasic認証情報。user:password形式、複数はカンマ区切り。
+
 Globals:
   Function:
     Timeout: 10
@@ -74,10 +80,36 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: v1
+      Auth:
+        Authorizers:
+          AdminApiAuthorizer:
+            FunctionArn: !GetAtt AdminAuthorizerFunction.Arn
+            FunctionPayloadType: TOKEN
+            Identity:
+              Header: Authorization
+              ReauthorizeEvery: 0
 
   # -------------------------------------------------------------------
   # 4. Lambda Functions (APIの裏側)
   # -------------------------------------------------------------------
+  AdminAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/auth/
+      Handler: app.authorize
+      Runtime: nodejs20.x
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          ADMIN_AUTH_CREDENTIALS: !Ref AdminAuthCredentials
+
+  AdminAuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AdminAuthorizerFunction}"
+      RetentionInDays: 7
+
   InitializeUploadFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -141,6 +173,8 @@ Resources:
             Path: /admin/entries
             Method: get
             RestApiId: !Ref FaceregApi
+            Auth:
+              Authorizer: AdminApiAuthorizer
 
   BulkDeleteFunction:
     Type: AWS::Serverless::Function
@@ -162,6 +196,8 @@ Resources:
             Path: /admin/entries/bulk-delete
             Method: post
             RestApiId: !Ref FaceregApi
+            Auth:
+              Authorizer: AdminApiAuthorizer
 
   # -------------------------------------------------------------------
   # 5. フロントエンド配信用 S3 Bucket
@@ -275,4 +311,3 @@ Outputs:
   CloudFrontDistributionId:
     Description: "CloudFront Distribution ID"
     Value: !Ref CloudFrontDistribution
-

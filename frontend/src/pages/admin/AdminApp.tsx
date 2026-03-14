@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Search, Download, Trash2, LogOut, CheckSquare, Image as ImageIcon, Loader2 } from 'lucide-react'
-import { apiClient } from '../../api/apiClient'
+import { ApiClientError, apiClient, createAdminAuthHeader } from '../../api/apiClient'
 import type { Entry } from '../../api/apiClient'
 
 const ITEMS_PER_PAGE = 15
 
 export default function AdminApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [authHeader, setAuthHeader] = useState<string | null>(null)
   
   // ログインフォーム状態
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
+  const [loginError, setLoginError] = useState<string | null>(null)
 
   // ダッシュボード状態
   const [entries, setEntries] = useState<Entry[]>([])
@@ -22,12 +24,32 @@ export default function AdminApp() {
   const [currentPage, setCurrentPage] = useState(1)
 
   // 簡易ログイン処理 (複数ID対応)
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // 簡易認証: ユーザーIDとパスワードが入力されていれば許可
-    // 本格的な認証 (Cognito等) は別Issueで対応
-    if (userId && password) {
+    setLoginError(null)
+
+    if (!userId || !password) {
+      setLoginError('ユーザーIDとパスワードを入力してください。')
+      return
+    }
+
+    const nextAuthHeader = createAdminAuthHeader(userId, password)
+
+    try {
+      setIsLoading(true)
+      const data = await apiClient.listEntries(nextAuthHeader)
+      setEntries(data)
+      setAuthHeader(nextAuthHeader)
       setIsLoggedIn(true)
+    } catch (err) {
+      console.error(err)
+      if (err instanceof ApiClientError && err.status === 401) {
+        setLoginError('ユーザーIDまたはパスワードが正しくありません。')
+      } else {
+        setLoginError('ログインに失敗しました。')
+      }
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -36,31 +58,32 @@ export default function AdminApp() {
     setIsLoggedIn(false)
     setUserId('')
     setPassword('')
+    setAuthHeader(null)
+    setLoginError(null)
     setEntries([])
     setSelectedIds(new Set())
   }
 
   // エントリー一覧の取得
-  const fetchEntries = async () => {
+  const fetchEntries = async (header = authHeader) => {
+    if (!header) return
     setIsLoading(true)
     setError(null)
     try {
-      const data = await apiClient.listEntries()
+      const data = await apiClient.listEntries(header)
       setEntries(data)
     } catch (err) {
       console.error(err)
-      setError('データの取得に失敗しました。')
+      if (err instanceof ApiClientError && err.status === 401) {
+        handleLogout()
+        setLoginError('認証情報が無効です。再ログインしてください。')
+      } else {
+        setError('データの取得に失敗しました。')
+      }
     } finally {
       setIsLoading(false)
     }
   }
-
-  // ログイン成功時に一覧を取得
-  useEffect(() => {
-    if (isLoggedIn) {
-      fetchEntries()
-    }
-  }, [isLoggedIn])
 
   // 検索・フィルタリング
   const filteredEntries = entries.filter(e => {
@@ -114,7 +137,10 @@ export default function AdminApp() {
     
     try {
       setIsLoading(true)
-      await apiClient.bulkDeleteEntries(itemsToDelete)
+      if (!authHeader) {
+        throw new Error('認証情報がありません。')
+      }
+      await apiClient.bulkDeleteEntries(itemsToDelete, authHeader)
       // 再取得
       await fetchEntries()
       // 削除されたIDを選択状態から解除
@@ -168,7 +194,7 @@ export default function AdminApp() {
         <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg">
           <div className="text-center md:mb-8 mb-6">
             <h1 className="text-2xl font-bold text-gray-800">顔写真登録システム 管理者用</h1>
-            <p className="text-sm text-gray-500 mt-2">IDとパスワードを入力してください</p>
+            <p className="text-sm text-gray-500 mt-2">IDとパスワードを入力してログインしてください</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
@@ -191,11 +217,22 @@ export default function AdminApp() {
                 onChange={e => setPassword(e.target.value)}
               />
             </div>
+            {loginError && (
+              <p className="text-sm text-red-600">{loginError}</p>
+            )}
             <button
               type="submit"
+              disabled={isLoading}
               className="w-full py-3 bg-[var(--primary)] text-white rounded-md font-semibold hover:bg-[var(--primary-hover)] transition-colors shadow-sm"
             >
-              ログイン
+              {isLoading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  認証中...
+                </span>
+              ) : (
+                'ログイン'
+              )}
             </button>
           </form>
         </div>
@@ -270,7 +307,9 @@ export default function AdminApp() {
                 クリア
               </button>
               <button 
-                onClick={fetchEntries}
+                onClick={() => {
+                  void fetchEntries()
+                }}
                 className="flex items-center gap-2 px-6 py-2.5 bg-gray-800 text-white rounded-md hover:bg-gray-900 font-medium text-sm transition-colors whitespace-nowrap"
               >
                 {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}

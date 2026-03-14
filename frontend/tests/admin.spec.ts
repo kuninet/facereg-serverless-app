@@ -4,6 +4,12 @@ test.describe('管理画面ダッシュボード', () => {
   test.beforeEach(async ({ page }) => {
     // APIレスポンスをモック化して、バックエンドなしでもUIテストが通るようにする
     await page.route('**/v1/admin/entries', async route => {
+      const authHeader = route.request().headers()['authorization']
+      if (authHeader !== `Basic ${Buffer.from('admin:password').toString('base64')}`) {
+        await route.fulfill({ status: 401, body: 'Unauthorized' })
+        return
+      }
+
       const json = [
         {
           id: 'ENTRY-MOCK-1',
@@ -39,5 +45,14 @@ test.describe('管理画面ダッシュボード', () => {
     const firstCheckbox = page.locator('tbody input[type="checkbox"]').first();
     await firstCheckbox.check();
     await expect(deleteBtn).toBeEnabled();
+  });
+
+  test('誤った認証情報ではログインできないこと', async ({ page }) => {
+    await page.fill('input[type="text"]', 'admin');
+    await page.fill('input[type="password"]', 'wrong-password');
+    await page.getByRole('button', { name: 'ログイン' }).click();
+
+    await expect(page.getByText('ユーザーIDまたはパスワードが正しくありません。')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '顔写真登録システム 管理者用' })).toBeVisible();
   });
 });
