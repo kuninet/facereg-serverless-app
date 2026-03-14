@@ -16,6 +16,9 @@ build/
 .aws-sam/
 samconfig.toml
 
+# Test results
+tmp/test-results/
+
 # IDE
 .vscode/
 .idea/
